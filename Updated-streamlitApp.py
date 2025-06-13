@@ -29,7 +29,6 @@ def download_model():
         with st.spinner("Downloading model (186 MB)... This may take 2-5 minutes"):
             response = requests.get(MODEL_URL, stream=True)
             response.raise_for_status()
-            
             temp_path = f"{MODEL_PATH}.tmp"
             with open(temp_path, "wb") as f:
                 for chunk in response.iter_content(chunk_size=8192):
@@ -42,7 +41,8 @@ def load_model():
     try:
         download_model()
         with open(MODEL_PATH, "rb") as f:
-            return pickle.load(f)
+            model = pickle.load(f)
+        return model
     except Exception as e:
         st.error(f"Failed to load model: {str(e)}")
         return None
@@ -52,8 +52,13 @@ model = load_model()
 # Prediction function
 def predict_delivery_time(inputs):
     try:
-        prediction = model.predict(np.array([inputs]))
-        return max(1, round(prediction[0]))
+        inputs_array = np.array([inputs])
+        if hasattr(model, 'predict'):
+            prediction = model.predict(inputs_array)
+            return max(1, round(prediction[0]))
+        else:
+            st.error("Loaded model doesn't support prediction.")
+            return None
     except Exception as e:
         st.error(f"Prediction failed: {str(e)}")
         return None
@@ -61,14 +66,13 @@ def predict_delivery_time(inputs):
 # UI Components
 st.title("📦 Timelytics Order-to-Delivery Predictor")
 st.markdown("""
-Predict delivery times using our machine learning model.
+Predict delivery times using our machine learning model.  
 The model will be downloaded automatically on first run (186 MB).
 """)
 
 with st.sidebar:
     st.header("🛒 Order Details")
-    
-    # Date inputs
+
     col1, col2 = st.columns(2)
     with col1:
         purchase_dow = st.selectbox(
@@ -87,35 +91,24 @@ with st.sidebar:
                 "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][x-1],
             index=0
         )
-    
+
     year = st.number_input("Year", min_value=2015, max_value=2025, value=2023)
-    
-    # Product details
+
     st.subheader("Product Information")
     product_size_cm3 = st.number_input("Size (cm³)", min_value=1, value=9328)
     product_weight_g = st.number_input("Weight (grams)", min_value=1, value=1800)
-    
-    # Location details
+
     st.subheader("Location Information")
     col3, col4 = st.columns(2)
     with col3:
-        geolocation_state_customer = st.selectbox(
-            "Customer State",
-            options=list(range(1, 28)),
-            index=9
-        )
+        geolocation_state_customer = st.selectbox("Customer State", options=list(range(1, 28)), index=9)
     with col4:
-        geolocation_state_seller = st.selectbox(
-            "Seller State",
-            options=list(range(1, 28)),
-            index=19
-        )
-    
+        geolocation_state_seller = st.selectbox("Seller State", options=list(range(1, 28)), index=19)
+
     distance = st.number_input("Distance (km)", min_value=0.1, value=475.35, step=1.0)
-    
+
     submit = st.button("🚀 Predict Delivery Time", type="primary")
 
-# Prediction logic
 if submit:
     if model is None:
         st.error("Model not loaded. Please check the download.")
@@ -130,13 +123,12 @@ if submit:
             geolocation_state_seller,
             distance
         ]
-        
+
         prediction = predict_delivery_time(inputs)
         if prediction:
             st.success(f"## Predicted Delivery Time: {prediction} days")
             st.balloons()
 
-# Sample data section
 with st.expander("📋 Sample Inputs for Testing"):
     sample_data = {
         "Scenario": ["Small Package", "Heavy Item", "Long Distance"],
@@ -149,17 +141,14 @@ with st.expander("📋 Sample Inputs for Testing"):
     }
     st.table(pd.DataFrame(sample_data))
 
-# Help section
 with st.expander("❓ Help & Information"):
     st.markdown("""
     **Model Information:**
     - Size: 186 MB (downloaded from GitHub Releases)
     - Ensemble of XGBoost, Random Forest, and SVM
     - Accuracy: ±1.5 days MAE
-    
+
     **Troubleshooting:**
     - Slow download? Wait 2-5 minutes on first run
     - Error? Refresh the page to retry
     """)
-
-
